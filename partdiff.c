@@ -471,18 +471,19 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 		if(size > 1){
 			if(rank == 0 && iter > 0){
 				// printf("0 receiving with iter %ld \n", iter);
-				MPI_Recv(Matrix[0][chunksize+1],N+1, MPI_DOUBLE, 1, 0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv(Matrix[0][chunksize+1],N+1, MPI_DOUBLE, 1, iter-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
 			if(rank >0 && rank < size -1 ){
-				// printf("rank %d receiving with iter %ld \n",rank,  iter);
-				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, rank-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				// printf("rank %d receiving from up with iter %ld \n",rank,  iter);
+				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, iter+1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 				if(iter > 0){
-					MPI_Recv(Matrix[0][chunksize+1],N+1,MPI_DOUBLE, rank+1, rank,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+					// printf("rank %d receiving from down with iter %ld \n",rank,  iter);
+					MPI_Recv(Matrix[0][chunksize+1],N+1,MPI_DOUBLE, rank+1, iter-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 				}
 			}
 			if(rank == size -1){
 				// printf("rank %d receiving with iter %ld \n",rank, iter);
-				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, iter+1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
 		}
 
@@ -517,7 +518,7 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 			}
 			if(i == 1 && rank > 0){
 				// printf("rank %d sending up with iter %ld \n", rank, iter);
-				MPI_Isend(Matrix[0][1],N+1,MPI_DOUBLE, rank-1, rank-1,MPI_COMM_WORLD, &req);
+				MPI_Isend(Matrix[0][1],N+1,MPI_DOUBLE, rank-1, iter,MPI_COMM_WORLD, &req);
 			}
 		}
 		iter++;
@@ -525,11 +526,11 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 		if(size > 1){
 			if(rank == 0){
 				// printf("0 sending with iter %ld \n", iter);
-				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, 1, 0,MPI_COMM_WORLD);
+				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, 1, iter,MPI_COMM_WORLD);
 			}
 			if(rank >0 && rank < size -1 ){
 				// printf("rank %d sending down with iter %ld \n", rank, iter);
-				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, rank+1, rank+1,MPI_COMM_WORLD);
+				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, rank+1, iter,MPI_COMM_WORLD);
 			}
 			// if(rank == size -1 ){
 			// 	printf("2 sending with iter %ld \n", iter);
