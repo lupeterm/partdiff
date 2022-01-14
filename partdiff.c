@@ -93,10 +93,10 @@ initVariables(struct calculation_arguments *arguments, struct calculation_result
 	arguments->i_start = arguments->rank * arguments->chunk_size_general + 1 /* because first row is not written to */;
 	arguments->i_end = ((arguments->rank + 1) * arguments->chunk_size_general) + 1 + (arguments->chunk_size_process - arguments->chunk_size_general);
 
-	// printf("\nN = %ld\n(general) chunk_size = %ld\n", arguments->N, arguments->chunk_size_general);
-	// printf(
-	// 	"(thread-specific) chunk_size = %ld\n\ti_start = %ld\n\ti_end = %ld\n\n",
-	// 	arguments->chunk_size_process, arguments->i_start, arguments->i_end);
+	printf("\nN = %ld\n(general) chunk_size = %ld\n", arguments->N, arguments->chunk_size_general);
+	printf(
+		"(thread-specific) chunk_size = %ld\n\ti_start = %ld\n\ti_end = %ld\n\n",
+		arguments->chunk_size_process, arguments->i_start, arguments->i_end);
 	MPI_Barrier(MPI_COMM_WORLD);
 	results->m = 0;
 	results->stat_iteration = 0;
@@ -474,7 +474,7 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 				MPI_Recv(Matrix[0][chunksize+1],N+1, MPI_DOUBLE, 1, 0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
 			if(rank >0 && rank < size -1 ){
-				// printf("1 receiving with iter %ld \n", iter);
+				// printf("rank %d receiving with iter %ld \n",rank,  iter);
 				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, rank-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 				if(iter > 0){
 					MPI_Recv(Matrix[0][chunksize+1],N+1,MPI_DOUBLE, rank+1, rank,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -482,7 +482,7 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 			}
 			if(rank == size -1){
 				// printf("rank %d receiving with iter %ld \n",rank, iter);
-				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, rank-1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
 		}
 
@@ -516,6 +516,7 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 				Matrix[m1][i][j] = star;
 			}
 			if(i == 1 && rank > 0){
+				// printf("rank %d sending up with iter %ld \n", rank, iter);
 				MPI_Isend(Matrix[0][1],N+1,MPI_DOUBLE, rank-1, rank-1,MPI_COMM_WORLD, &req);
 			}
 		}
@@ -527,7 +528,7 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, 1, 0,MPI_COMM_WORLD);
 			}
 			if(rank >0 && rank < size -1 ){
-				// printf("1 sending with iter %ld \n", iter);
+				// printf("rank %d sending down with iter %ld \n", rank, iter);
 				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, rank+1, rank+1,MPI_COMM_WORLD);
 			}
 			// if(rank == size -1 ){
@@ -535,6 +536,7 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 			// 	MPI_Send(Matrix[0][first],N+1,MPI_DOUBLE, rank-1, rank-1,MPI_COMM_WORLD);
 			// }
 		}
+			// printf("rank %d iter %ld\n", rank ,iter);
 
 		/* exchange m1 and m2 */
 		i = m1;
