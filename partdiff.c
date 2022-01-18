@@ -433,27 +433,26 @@ calculate_jacobi(struct calculation_arguments const *arguments, struct calculati
 static void
 calculate_gauss(struct calculation_arguments const *arguments, struct calculation_results *results, struct options const *options)
 {
-	int rank = arguments->rank;
-	int size = arguments->num_processes;
-	if(rank == 0){
-		// printf("Distributed Memory calculation!\n");
-	}
-	uint64_t i, j; /* local variables for loops */
+	int rank = arguments->rank;  /* current rank of process */
+	int size = arguments->num_processes; /* total amount of processes */
+
+	uint64_t i, j, iter, chunksize; /* local variables  */
 	int m1, m2;			/* used as indices for old and new matrices */
 	double star;		/* four times center value minus 4 neigh.b values */
 	double residuum;	/* residuum of current iteration */
 	double maxresiduum; /* maximum residuum value of a slave in iteration */
 	uint64_t const N = arguments->N;
 	double const h = arguments->h;
-
 	double pih = 0.0;
 	double fpisin = 0.0;
-	MPI_Request req;
-	uint64_t iter, chunksize;
+
+	/*  typedef of matrix, +2 because of overlapping rows */
+	typedef double(*matrix)[arguments->chunk_size_process+2][N + 1];
+	matrix Matrix = (matrix)arguments->Matrix;
+	
+	MPI_Request req; /* needed for MPI_Isend  */
 	chunksize= arguments->chunk_size_process;
 	iter = 0;
-	typedef double(*matrix)[arguments->chunk_size_process+2][N + 1];
-	matrix Matrix = (matrix)arguments->Matrix;	
 
 	int term_iteration = options->term_iteration;
 	m1 = 0;
@@ -463,14 +462,22 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 		pih =M_PI* h;
 		fpisin = 0.25 * TWO_PI_SQUARE * h * h;
 	}
-	MPI_Barrier(MPI_COMM_WORLD);
+
+	/*
+		termination because of iteration works.
+		termination because of precision does not (because it hasnt been implemented).
+		MPI_Allreduce completely halts the program.
+		A valid approach might be to ISend the maxresiduums around, and perform a manual reduction if you will. 
+	*/
+
+
 	while (term_iteration > 0)
 	{
 		maxresiduum = 0;
 		
 		if(size > 1){
 			if(rank == 0 && iter > 0){
-				// printf("0 receiving with iter %ld \n", iter);
+				// printf("rank 0 receiving with iter %ld \n", iter);
 				MPI_Recv(Matrix[0][chunksize+1],N+1, MPI_DOUBLE, 1, iter-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
 			if(rank >0 && rank < size -1 ){
@@ -532,12 +539,7 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 				// printf("rank %d sending down with iter %ld \n", rank, iter);
 				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, rank+1, iter,MPI_COMM_WORLD);
 			}
-			// if(rank == size -1 ){
-			// 	printf("2 sending with iter %ld \n", iter);
-			// 	MPI_Send(Matrix[0][first],N+1,MPI_DOUBLE, rank-1, rank-1,MPI_COMM_WORLD);
-			// }
 		}
-			// printf("rank %d iter %ld\n", rank ,iter);
 
 		/* exchange m1 and m2 */
 		i = m1;
@@ -750,6 +752,7 @@ int main(int argc, char **argv)
 	initMatrices(&arguments, &options);
 
 	gettimeofday(&start_time, NULL);
+	/*  Seperated the methods as I would not like to see both cramped into one, I think the fs can handle couple more byte of text. */ 
 	if(options.method == METH_JACOBI){
 		calculate_jacobi(&arguments, &results, &options);
 	}
@@ -762,11 +765,9 @@ int main(int argc, char **argv)
 
 
 	displayStatistics(&arguments, &results, &options);
-	// displayMatrix(&arguments, &results, &options);
 	displayMatrixMpi(&arguments, &results, &options, arguments.rank, arguments.num_processes, arguments.i_start, arguments.i_end - 1);
 
 	freeMatrices(&arguments);
-	// printf("working here\n");
 	MPI_Finalize();
 	return 0;
 }
