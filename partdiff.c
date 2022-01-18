@@ -93,10 +93,6 @@ initVariables(struct calculation_arguments *arguments, struct calculation_result
 	arguments->i_start = arguments->rank * arguments->chunk_size_general + 1 /* because first row is not written to */;
 	arguments->i_end = ((arguments->rank + 1) * arguments->chunk_size_general) + 1 + (arguments->chunk_size_process - arguments->chunk_size_general);
 
-	printf("\nN = %ld\n(general) chunk_size = %ld\n", arguments->N, arguments->chunk_size_general);
-	printf(
-		"(thread-specific) chunk_size = %ld\n\ti_start = %ld\n\ti_end = %ld\n\n",
-		arguments->chunk_size_process, arguments->i_start, arguments->i_end);
 	MPI_Barrier(MPI_COMM_WORLD);
 	results->m = 0;
 	results->stat_iteration = 0;
@@ -476,20 +472,10 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 		maxresiduum = 0;
 		
 		if(size > 1){
-			if(rank == 0 && iter > 0){
-				// printf("rank 0 receiving with iter %ld \n", iter);
-				MPI_Recv(Matrix[0][chunksize+1],N+1, MPI_DOUBLE, 1, iter-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			if(iter > 0 && rank != size -1 ){
+				MPI_Recv(Matrix[0][chunksize+1],N+1,MPI_DOUBLE, rank+1, iter-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
-			if(rank >0 && rank < size -1 ){
-				// printf("rank %d receiving from up with iter %ld \n",rank,  iter);
-				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, iter+1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				if(iter > 0){
-					// printf("rank %d receiving from down with iter %ld \n",rank,  iter);
-					MPI_Recv(Matrix[0][chunksize+1],N+1,MPI_DOUBLE, rank+1, iter-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				}
-			}
-			if(rank == size -1){
-				// printf("rank %d receiving with iter %ld \n",rank, iter);
+			if(rank != 0){
 				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, iter+1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
 		}
@@ -519,33 +505,24 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 					residuum = (residuum < 0) ? -residuum : residuum;
 					maxresiduum = (residuum < maxresiduum) ? maxresiduum : residuum;
 				}
-				// printf("working here for rank=%d, i=%ld, j=%ld\n",arguments->rank,i,j);
-
 				Matrix[m1][i][j] = star;
 			}
+			// send to rank -1 as soon as first row is calculated
 			if(i == 1 && rank > 0){
-				// printf("rank %d sending up with iter %ld \n", rank, iter);
 				MPI_Isend(Matrix[0][1],N+1,MPI_DOUBLE, rank-1, iter,MPI_COMM_WORLD, &req);
 			}
 		}
 		iter++;
 		results->stat_iteration=iter;
-		if(size > 1){
-			if(rank == 0){
-				// printf("0 sending with iter %ld \n", iter);
-				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, 1, iter,MPI_COMM_WORLD);
-			}
-			if(rank >0 && rank < size -1 ){
-				// printf("rank %d sending down with iter %ld \n", rank, iter);
-				MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, rank+1, iter,MPI_COMM_WORLD);
-			}
+		// send to next rank after one iteration
+		if(size > 1 && rank != size -1){
+			MPI_Send(Matrix[0][chunksize], N+1, MPI_DOUBLE, rank+1, iter,MPI_COMM_WORLD);
 		}
 
 		/* exchange m1 and m2 */
 		i = m1;
 		m1 = m2;
 		m2 = i;
-
 
 		/* check for stopping calculation depending on termination method */
 		if (options->termination == TERM_PREC)
@@ -560,15 +537,7 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 			term_iteration--;
 		}
 
-		// printf("\n\nIteration %d\n\n", results->stat_iteration);
 	}
-	/*
-	if (arguments->rank == 0)
-	{
-		printf("\n\nCalculation ended!\n\n");
-	}
-	*/
-
 	results->m = m2;
 }
 
