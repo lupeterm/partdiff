@@ -446,7 +446,9 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 	typedef double(*matrix)[arguments->chunk_size_process+2][N + 1];
 	matrix Matrix = (matrix)arguments->Matrix;
 	
-	MPI_Request req; /* needed for MPI_Isend  */
+	MPI_Request send_req; /* needed for MPI_Isend  */
+	MPI_Request recv_req; /* needed for MPI_Irecv  */
+
 	chunksize= arguments->chunk_size_process;
 	iter = 0;
 
@@ -472,23 +474,27 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 		maxresiduum = 0;
 		
 		if(size > 1){
-			if(iter > 0 && rank != size -1 ){
-				MPI_Recv(Matrix[0][chunksize+1],N+1,MPI_DOUBLE, rank+1, iter-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			}
+			
 			if(rank != 0){
 				MPI_Recv(Matrix[0][0],N+1,MPI_DOUBLE, rank-1, iter+1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
 		}
-
+		if(iter > 0 && rank != size -1 ){
+			// MPI_Recv(Matrix[0][chunksize+1],N+1,MPI_DOUBLE, rank+1, iter-1,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			MPI_Irecv(Matrix[0][chunksize+1],N+1,MPI_DOUBLE, rank+1, iter-1,MPI_COMM_WORLD, &recv_req);
+		}
 		/* over all rows */
 		for (i = 1; i <= arguments->chunk_size_process; i++)
 		{
 			double fpisin_i = 0.0;
-
 			if (options->inf_func == FUNC_FPISIN)
 			{
 				fpisin_i = fpisin * sin(pih * (double)(i + arguments->i_start - 1));
 			}
+			if(iter > 0 && rank != size -1 && i == chunksize){
+				MPI_Wait(&recv_req, MPI_STATUS_IGNORE);
+			}
+
 			/* over all columns */
 			for (j = 1; j < N; j++)
 			{
@@ -508,8 +514,10 @@ calculate_gauss(struct calculation_arguments const *arguments, struct calculatio
 				Matrix[m1][i][j] = star;
 			}
 			// send to rank -1 as soon as first row is calculated
+
+			
 			if(i == 1 && rank > 0){
-				MPI_Isend(Matrix[0][1],N+1,MPI_DOUBLE, rank-1, iter,MPI_COMM_WORLD, &req);
+				MPI_Isend(Matrix[0][1],N+1,MPI_DOUBLE, rank-1, iter,MPI_COMM_WORLD, &send_req);
 			}
 		}
 		iter++;
